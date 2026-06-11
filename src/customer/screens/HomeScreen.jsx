@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, MapPin, ChevronDown, Search, ChevronRight } from 'lucide-react';
+import { Bell, MapPin, ChevronDown, Search } from 'lucide-react';
 import QueueRing from '../../shared/components/QueueRing';
 import StatusBadge from '../../shared/components/StatusBadge';
 import RatingStars from '../../shared/components/RatingStars';
-import { salons, categories } from '../../shared/data/salons';
+import { categories } from '../../shared/data/salons';
+import { getAllSalons } from '../../shared/data/salonRegistry';
 import useAuthStore from '../../stores/authStore';
 
 function SalonListCard({ salon, onClick }) {
@@ -68,6 +69,7 @@ export default function HomeScreen() {
   const { user } = useAuthStore();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const salons = getAllSalons();
 
   const greeting = () => {
     const hour = new Date().getHours();

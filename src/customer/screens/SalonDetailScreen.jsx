@@ -5,13 +5,14 @@ import QueueRing from '../../shared/components/QueueRing';
 import StatusBadge from '../../shared/components/StatusBadge';
 import RatingStars from '../../shared/components/RatingStars';
 import Button from '../../shared/components/Button';
-import { salons, reviews } from '../../shared/data/salons';
+import { reviews } from '../../shared/data/salons';
+import { getSalonById } from '../../shared/data/salonRegistry';
 import { statusConfig } from '../../shared/data/queueLogic';
 
 export default function SalonDetailScreen() {
   const { salonId } = useParams();
   const navigate = useNavigate();
-  const salon = salons.find(s => s.id === salonId);
+  const salon = getSalonById(salonId);
   const [currentPhoto, setCurrentPhoto] = useState(0);
   const [showAllServices, setShowAllServices] = useState(false);
 

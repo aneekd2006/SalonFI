@@ -8,6 +8,7 @@ import SalonDetailScreen from './screens/SalonDetailScreen';
 import BookingFlowScreen from './screens/BookingFlowScreen';
 import MyBookingsScreen from './screens/MyBookingsScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import RegistrationScreen from './screens/RegistrationScreen';
 import useAuthStore from '../stores/authStore';
 import useBookingStore from '../stores/bookingStore';
 
@@ -38,6 +39,7 @@ export default function CustomerApp() {
         <Route path="/explore" element={<ExploreScreen />} />
         <Route path="/bookings" element={<MyBookingsScreen />} />
         <Route path="/profile" element={<ProfileScreen />} />
+        <Route path="/register-salon" element={<RegistrationScreen />} />
       </Route>
       <Route path="/salon/:salonId" element={<SalonDetailScreen />} />
       <Route path="/book/:salonId" element={<BookingFlowScreen />} />

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Check } from 'lucide-react';
 import Button from '../../shared/components/Button';
-import { salons } from '../../shared/data/salons';
+import { getSalonById } from '../../shared/data/salonRegistry';
 import { generateSlots, holdSlot } from '../../shared/data/queueLogic';
 import useBookingStore from '../../stores/bookingStore';
 
@@ -15,7 +15,7 @@ const timeToMinutes = (t) => {
 export default function BookingFlowScreen() {
   const { salonId } = useParams();
   const navigate = useNavigate();
-  const salon = salons.find(s => s.id === salonId);
+  const salon = getSalonById(salonId);
   const { addBooking } = useBookingStore();
 
   const [step, setStep] = useState(1);

@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { Search, MapPin, ChevronDown } from 'lucide-react';
 import StatusBadge from '../../shared/components/StatusBadge';
 import RatingStars from '../../shared/components/RatingStars';
-import { salons, categories } from '../../shared/data/salons';
+import { categories } from '../../shared/data/salons';
+import { getAllSalons } from '../../shared/data/salonRegistry';
 
 export default function ExploreScreen() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const salons = getAllSalons();
 
   const filtered = salons.filter(s => {
     if (selectedCategory === 'Open Now' && !s.isOpen) return false;
