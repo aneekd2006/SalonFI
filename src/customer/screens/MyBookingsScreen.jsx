@@ -8,6 +8,10 @@ import useBookingStore from '../../stores/bookingStore';
 function BookingCard({ booking, onCancel }) {
   const navigate = useNavigate();
   const isUpcoming = booking.status === 'confirmed';
+  const serviceNames = Array.isArray(booking.services)
+    ? booking.services.map(s => s.name).join(', ')
+    : booking.service?.name || 'Service';
+  const total = booking.total || (booking.service?.price || 0);
 
   return (
     <div className="bg-surface-card rounded-xl shadow-xs p-4">
@@ -18,7 +22,7 @@ function BookingCard({ booking, onCancel }) {
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-bold text-text-primary">{booking.salonName}</h3>
           <p className="text-xs text-text-secondary">{booking.dateStr} · {booking.time}</p>
-          <p className="text-xs text-text-tertiary">{booking.service?.name} · ₹{booking.total}</p>
+          <p className="text-xs text-text-tertiary">{serviceNames} · ₹{total}</p>
         </div>
       </div>
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">

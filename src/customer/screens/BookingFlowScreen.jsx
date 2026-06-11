@@ -1,10 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Check, Calendar as CalendarIcon, Clock } from 'lucide-react';
+import { ChevronLeft, Check } from 'lucide-react';
 import Button from '../../shared/components/Button';
 import { salons } from '../../shared/data/salons';
 import { generateSlots, holdSlot } from '../../shared/data/queueLogic';
 import useBookingStore from '../../stores/bookingStore';
+
+// Helper to convert HH:MM to minutes since midnight
+const timeToMinutes = (t) => {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+};
 
 export default function BookingFlowScreen() {
   const { salonId } = useParams();
@@ -12,8 +18,8 @@ export default function BookingFlowScreen() {
   const salon = salons.find(s => s.id === salonId);
   const { addBooking } = useBookingStore();
 
-  const [step, setStep] = useState(1); // 1: Service, 2: Date/Time, 3: Confirm, 4: Success
-  const [selectedService, setSelectedService] = useState(null);
+  const [step, setStep] = useState(1);
+  const [selectedServices, setSelectedServices] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState(null);
   const [note, setNote] = useState('');
@@ -31,18 +37,57 @@ export default function BookingFlowScreen() {
   }
 
   // Generate dates for next 7 days
-  const dates = [];
-  const today = new Date();
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() + i);
-    dates.push(d);
-  }
+  const dates = useMemo(() => {
+    const arr = [];
+    const today = new Date();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      arr.push(d);
+    }
+    return arr;
+  }, []);
 
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-  const slots = selectedDate ? generateSlots(salon, selectedDate.toISOString().split('T')[0]) : [];
+  // Generate slots once when date changes — stable, not random on each render
+  const rawSlots = useMemo(() => {
+    if (!selectedDate) return [];
+    // IMPORTANT: Use a seed based on salonId+date so slots are stable
+    // We do this by passing a date string that the generator uses as seed
+    return generateSlots(salon, selectedDate.toISOString().split('T')[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, salonId]);
+
+  // Total duration of selected services
+  const totalDuration = useMemo(() => {
+    return selectedServices.reduce((sum, s) => sum + (s.duration || 0), 0);
+  }, [selectedServices]);
+
+  // Total price
+  const totalPrice = useMemo(() => {
+    return selectedServices.reduce((sum, s) => sum + (s.price || 0), 0);
+  }, [selectedServices]);
+
+  // Filter slots that can accommodate all selected services sequentially
+  const slots = useMemo(() => {
+    return rawSlots.filter(slot => {
+      if (!slot.available) return false;
+      const start = timeToMinutes(slot.time);
+      const end = start + totalDuration;
+      const closing = timeToMinutes(salon.hours.close);
+      if (end > closing) return false;
+      // Verify each intermediate slot is available
+      const interval = Math.max(15, Math.round(salon.avgServiceTime / salon.activeChairs));
+      for (let t = start + interval; t < end; t += interval) {
+        const timeStr = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+        const matching = rawSlots.find(s => s.time === timeStr);
+        if (!matching || !matching.available) return false;
+      }
+      return true;
+    });
+  }, [rawSlots, totalDuration, salon.hours.close, salon.avgServiceTime, salon.activeChairs]);
 
   const dateStr = selectedDate
     ? `${dayNames[selectedDate.getDay()]}, ${selectedDate.getDate()} ${monthNames[selectedDate.getMonth()]}`
@@ -53,16 +98,27 @@ export default function BookingFlowScreen() {
       salonId: salon.id,
       salonName: salon.name,
       salonImage: salon.photos[0],
-      service: selectedService,
+      services: selectedServices,
       date: selectedDate?.toISOString(),
       dateStr,
       time: selectedTime,
       note,
-      total: selectedService?.price || 0,
+      total: totalPrice,
     };
     const result = addBooking(booking);
     setBookingResult(result);
     setStep(4);
+  };
+
+  const toggleService = (service) => {
+    const already = selectedServices.find(s => s.id === service.id);
+    if (already) {
+      setSelectedServices(selectedServices.filter(s => s.id !== service.id));
+    } else {
+      setSelectedServices([...selectedServices, service]);
+    }
+    // Reset time selection when services change (duration changes)
+    setSelectedTime(null);
   };
 
   return (
@@ -98,43 +154,54 @@ export default function BookingFlowScreen() {
       {step === 1 && (
         <div className="px-4">
           <h2 className="text-lg font-bold text-text-primary mb-4">What do you need?</h2>
+          {selectedServices.length > 0 && (
+            <div className="mb-3 p-3 bg-brand-light rounded-xl">
+              <p className="text-sm text-brand font-semibold">
+                {selectedServices.length} service{selectedServices.length > 1 ? 's' : ''} selected · ₹{totalPrice} · ~{totalDuration} min
+              </p>
+            </div>
+          )}
+          <p className="text-xs text-text-tertiary mb-3">You can select multiple services</p>
           <div className="space-y-2">
-            {salon.services.map(service => (
-              <button
-                key={service.id}
-                onClick={() => setSelectedService(service)}
-                className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${
-                  selectedService?.id === service.id
-                    ? 'border-brand bg-brand-light'
-                    : 'border-border bg-surface-card hover:border-border-strong'
-                }`}
-              >
-                <div className="flex-1 text-left">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-text-primary">{service.name}</span>
-                    {service.popular && (
-                      <span className="text-2xs font-semibold px-1.5 py-0.5 rounded-full bg-accent-light text-accent">Popular</span>
-                    )}
+            {salon.services.map(service => {
+              const isSelected = selectedServices.some(s => s.id === service.id);
+              return (
+                <button
+                  key={service.id}
+                  onClick={() => toggleService(service)}
+                  className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${
+                    isSelected
+                      ? 'border-brand bg-brand-light'
+                      : 'border-border bg-surface-card hover:border-border-strong'
+                  }`}
+                >
+                  <div className="flex-1 text-left">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-text-primary">{service.name}</span>
+                      {service.popular && (
+                        <span className="text-2xs font-semibold px-1.5 py-0.5 rounded-full bg-accent-light text-accent">Popular</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-text-tertiary mt-0.5">{service.duration} min</p>
                   </div>
-                  <p className="text-xs text-text-tertiary mt-0.5">{service.duration} min</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-bold text-brand">₹{service.price}</span>
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                    selectedService?.id === service.id ? 'border-brand bg-brand' : 'border-border'
-                  }`}>
-                    {selectedService?.id === service.id && <Check size={12} className="text-white" />}
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold text-brand">₹{service.price}</span>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      isSelected ? 'border-brand bg-brand' : 'border-border'
+                    }`}>
+                      {isSelected && <Check size={12} className="text-white" />}
+                    </div>
                   </div>
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
           <Button
             variant="primary"
             size="lg"
             fullWidth
             className="mt-6"
-            disabled={!selectedService}
+            disabled={selectedServices.length === 0}
             onClick={() => setStep(2)}
           >
             Continue
@@ -147,21 +214,40 @@ export default function BookingFlowScreen() {
         <div className="px-4">
           <h2 className="text-lg font-bold text-text-primary mb-4">When works for you?</h2>
 
+          {/* Selected services summary */}
+          {selectedServices.length > 0 && (
+            <div className="mb-3 p-3 bg-surface-elevated rounded-xl">
+              <p className="text-sm font-medium text-text-primary">
+                {selectedServices.map(s => s.name).join(', ')}
+              </p>
+              <p className="text-xs text-text-tertiary mt-0.5">~{totalDuration} min needed</p>
+            </div>
+          )}
+
           {/* Date Row */}
           <div className="flex gap-2 overflow-x-auto pb-3" style={{ scrollbarWidth: 'none' }}>
             {dates.map((d, i) => {
               const isToday = i === 0;
               const isSelected = selectedDate && d.toDateString() === selectedDate.toDateString();
+              const isPast = d < new Date(new Date().toDateString());
               return (
                 <button
                   key={i}
-                  onClick={() => setSelectedDate(d)}
+                  onClick={() => {
+                    if (!isPast) {
+                      setSelectedDate(d);
+                      setSelectedTime(null);
+                    }
+                  }}
+                  disabled={isPast}
                   className={`flex-shrink-0 w-14 py-2.5 rounded-xl text-center transition-all ${
-                    isSelected
-                      ? 'bg-brand text-white'
-                      : isToday
-                        ? 'bg-brand-light text-brand'
-                        : 'bg-surface-card border border-border text-text-secondary'
+                    isPast
+                      ? 'opacity-40 cursor-not-allowed bg-surface-elevated text-text-tertiary'
+                      : isSelected
+                        ? 'bg-brand text-white'
+                        : isToday
+                          ? 'bg-brand-light text-brand'
+                          : 'bg-surface-card border border-border text-text-secondary hover:border-brand/40'
                   }`}
                 >
                   <p className="text-2xs font-semibold">{isToday ? 'TODAY' : dayNames[d.getDay()].substring(0, 3)}</p>
@@ -174,31 +260,87 @@ export default function BookingFlowScreen() {
           {/* Time slots */}
           {selectedDate && (
             <div className="mt-4">
-              <p className="text-xs font-semibold text-text-tertiary mb-3">
+              <p className="text-xs font-semibold text-text-tertiary mb-2">
                 Available slots for {dateStr}
               </p>
               {slots.length === 0 ? (
-                <p className="text-sm text-text-tertiary text-center py-8">No slots available</p>
-              ) : (
-                <div className="grid grid-cols-3 gap-2">
-                  {slots.map((slot, i) => (
-                    <button
-                      key={i}
-                      onClick={() => slot.available && setSelectedTime(slot.time)}
-                      disabled={!slot.available}
-                      className={`py-2.5 rounded-xl text-sm font-medium transition-all ${
-                        selectedTime === slot.time
-                          ? 'bg-brand text-white'
-                          : slot.available
-                            ? 'bg-surface-card border border-border text-text-primary hover:border-border-strong'
-                            : 'bg-surface-elevated text-text-tertiary line-through cursor-not-allowed'
-                      }`}
-                    >
-                      {slot.time}
-                    </button>
-                  ))}
+                <div className="text-center py-8">
+                  <p className="text-sm text-text-tertiary">No slots available for this date and service combination.</p>
+                  <p className="text-xs text-text-tertiary mt-1">Try selecting fewer services or a different date.</p>
                 </div>
+              ) : (
+                <>
+                  {/* Morning slots */}
+                  {slots.some(s => timeToMinutes(s.time) < 720) && (
+                    <>
+                      <p className="text-2xs font-semibold text-text-tertiary tracking-wider mb-2 uppercase">Morning</p>
+                      <div className="grid grid-cols-3 gap-2 mb-4">
+                        {slots.filter(s => timeToMinutes(s.time) < 720).map((slot, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setSelectedTime(slot.time)}
+                            className={`py-2.5 rounded-xl text-sm font-medium transition-all ${
+                              selectedTime === slot.time
+                                ? 'bg-brand text-white'
+                                : 'bg-surface-card border border-border text-text-primary hover:border-brand/40'
+                            }`}
+                          >
+                            {slot.time}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {/* Afternoon slots */}
+                  {slots.some(s => timeToMinutes(s.time) >= 720 && timeToMinutes(s.time) < 1020) && (
+                    <>
+                      <p className="text-2xs font-semibold text-text-tertiary tracking-wider mb-2 uppercase">Afternoon</p>
+                      <div className="grid grid-cols-3 gap-2 mb-4">
+                        {slots.filter(s => timeToMinutes(s.time) >= 720 && timeToMinutes(s.time) < 1020).map((slot, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setSelectedTime(slot.time)}
+                            className={`py-2.5 rounded-xl text-sm font-medium transition-all ${
+                              selectedTime === slot.time
+                                ? 'bg-brand text-white'
+                                : 'bg-surface-card border border-border text-text-primary hover:border-brand/40'
+                            }`}
+                          >
+                            {slot.time}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {/* Evening slots */}
+                  {slots.some(s => timeToMinutes(s.time) >= 1020) && (
+                    <>
+                      <p className="text-2xs font-semibold text-text-tertiary tracking-wider mb-2 uppercase">Evening</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {slots.filter(s => timeToMinutes(s.time) >= 1020).map((slot, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setSelectedTime(slot.time)}
+                            className={`py-2.5 rounded-xl text-sm font-medium transition-all ${
+                              selectedTime === slot.time
+                                ? 'bg-brand text-white'
+                                : 'bg-surface-card border border-border text-text-primary hover:border-brand/40'
+                            }`}
+                          >
+                            {slot.time}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
               )}
+            </div>
+          )}
+
+          {selectedDate && selectedTime && (
+            <div className="mt-4 p-3 bg-brand-light rounded-xl">
+              <p className="text-sm font-semibold text-brand">Selected: {dateStr} at {selectedTime} · ~{totalDuration} min</p>
             </div>
           )}
 
@@ -229,12 +371,14 @@ export default function BookingFlowScreen() {
             </div>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
-                <span className="text-text-secondary">Service</span>
-                <span className="font-semibold text-text-primary">{selectedService?.name}</span>
+                <span className="text-text-secondary">Services</span>
+                <span className="font-semibold text-text-primary text-right">
+                  {selectedServices.map(s => s.name).join(', ')}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-text-secondary">Duration</span>
-                <span className="font-semibold text-text-primary">{selectedService?.duration} min</span>
+                <span className="font-semibold text-text-primary">~{totalDuration} min</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-text-secondary">Date</span>
@@ -246,7 +390,7 @@ export default function BookingFlowScreen() {
               </div>
               <div className="pt-3 mt-3 border-t border-border flex justify-between">
                 <span className="text-base font-bold text-text-primary">Total</span>
-                <span className="text-base font-bold text-brand">₹{selectedService?.price}</span>
+                <span className="text-base font-bold text-brand">₹{totalPrice}</span>
               </div>
             </div>
           </div>
@@ -291,8 +435,11 @@ export default function BookingFlowScreen() {
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-text-primary mb-2">You're booked!</h2>
-          <p className="text-sm text-text-secondary mb-8">
+          <p className="text-sm text-text-secondary mb-2">
             {salon.name} · {dateStr} · {selectedTime}
+          </p>
+          <p className="text-sm text-text-tertiary mb-8">
+            {selectedServices.map(s => s.name).join(', ')} · ₹{totalPrice}
           </p>
           <Button variant="primary" size="lg" fullWidth onClick={() => navigate('/bookings')}>
             View Booking

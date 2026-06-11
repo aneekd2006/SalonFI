@@ -88,7 +88,7 @@ export function generateSlots(salon, selectedDate) {
   for (let h = startHour; h < endHour; h++) {
     for (let m = 0; m < 60; m += interval) {
       const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-      const isBooked = Math.random() > 0.6;
+      const isBooked = false; // for demo, all slots are free
       const isHeld = isSlotHeld(salon.id, selectedDate, time);
       slots.push({ time, available: !isBooked && !isHeld });
     }

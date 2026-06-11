@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import Button from '../../shared/components/Button';
 import useAuthStore from '../../stores/authStore';
@@ -13,11 +13,20 @@ export default function PartnerLoginScreen() {
   const [error, setError] = useState('');
 
   const handleLogin = () => {
+    // Check demo credentials
     if (email === 'demo@studioverde.com' && password === 'demo123') {
       partnerLogin({ name: 'Arjun', email, salon: 'Studio Verde' });
       navigate('/partner/dashboard');
+      return;
+    }
+    // Check registered partners from localStorage
+    const partners = JSON.parse(localStorage.getItem('salonfi_partners') || '[]');
+    const found = partners.find(p => p.email === email && p.password === password);
+    if (found) {
+      partnerLogin({ name: found.fullName || found.salonName, email: found.email, salon: found.salonName });
+      navigate('/partner/dashboard');
     } else {
-      setError('Invalid credentials. Try demo@studioverde.com / demo123');
+      setError('Invalid credentials. Try demo@studioverde.com / demo123, or register a new account.');
     }
   };
 
@@ -80,7 +89,7 @@ export default function PartnerLoginScreen() {
         <div className="mt-4 text-center">
           <p className="text-xs text-text-tertiary">
             Not a partner yet?{' '}
-            <button className="text-brand font-semibold">Apply to join →</button>
+            <Link to="/partner/register" className="text-brand font-semibold">Apply to join →</Link>
           </p>
           <p className="text-xs text-text-tertiary mt-2">
             Demo: <span className="font-mono text-text-secondary">demo@studioverde.com / demo123</span>

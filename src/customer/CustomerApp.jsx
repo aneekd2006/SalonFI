@@ -22,16 +22,17 @@ export default function CustomerApp() {
     initialize();
   }, []);
 
-  // On first launch, show onboarding
+  // On first launch, redirect to onboarding
   useEffect(() => {
-    if (!hasSeenOnboarding && location.pathname === '/onboarding') {
-      return;
+    const state = useAuthStore.getState();
+    if (!state.hasSeenOnboarding && location.pathname !== '/onboarding') {
+      navigate('/onboarding', { replace: true });
     }
-  }, []);
+  }, [location.pathname, navigate]);
 
   return (
     <Routes>
-      <Route path="/onboarding" element={<OnboardingScreen onComplete={() => navigate('/')} />} />
+      <Route path="/onboarding" element={<OnboardingScreen onComplete={() => navigate('/', { replace: true })} />} />
       <Route element={<CustomerAppShell />}>
         <Route path="/" element={<HomeScreen />} />
         <Route path="/explore" element={<ExploreScreen />} />
